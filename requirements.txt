@@ -1,0 +1,27 @@
+# Core dependencies
+fastmcp
+pydantic
+pydantic-settings
+python-dotenv
+
+# Vector database
+qdrant-client
+pinecone
+pymilvus
+
+# Embedding providers
+voyageai
+openai
+
+# CLI dependencies
+rich
+questionary
+click
+
+# Utilities
+python-dateutil
+httpx
+
+# HTTP server
+fastapi
+uvicorn[standard]
