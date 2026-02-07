@@ -12,6 +12,7 @@ DEFAULT_EMBEDDING_MODELS = {
     "openai": "text-embedding-3-small",
     "voyageai": "voyage-4",  # Latest Voyage model
     "openrouter": "google/gemini-embedding-001",
+    "nvidia": "nvidia/nv-embedqa-e5-v5",
 }
 
 # Vector database settings

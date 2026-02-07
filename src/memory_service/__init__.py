@@ -6,6 +6,7 @@ from .embeddings import (
     VoyageEmbedding,
     OpenAIEmbedding,
     OpenRouterEmbedding,
+    NvidiaEmbedding,
 )
 from .vector_store import (
     VectorStore,
@@ -33,6 +34,7 @@ __all__ = [
     "VoyageEmbedding",
     "OpenAIEmbedding",
     "OpenRouterEmbedding",
+    "NvidiaEmbedding",
     # Vector stores
     "VectorStore",
     "QdrantVectorStore",

@@ -30,11 +30,12 @@ from .config.settings import (
     OpenAIProviderConfig,
     VoyageAIProviderConfig,
     OpenRouterProviderConfig,
+    NvidiaProviderConfig,
     VectorStoreConfig,
 )
 from .config.logging import setup_logging, get_logger
 from .config.config_docs import CONFIG_DOCS_CONTENT
-from .embeddings import VoyageEmbedding, OpenAIEmbedding, OpenRouterEmbedding
+from .embeddings import VoyageEmbedding, OpenAIEmbedding, OpenRouterEmbedding, NvidiaEmbedding
 from .vector_store import QdrantVectorStore, PineconeVectorStore, ZillizVectorStore
 from .memory import Memory, MemoryEncoder, MemoryStorage, MemoryRetrieval
 from .memory.viewer import format_memory_for_display
@@ -343,6 +344,7 @@ class EzMemoryCLI:
                     "OpenAI",
                     "VoyageAI",
                     "OpenRouter",
+                    "NVIDIA",
                     questionary.Separator(),
                     "Gemini (coming soon)",
                     questionary.Separator(),
@@ -363,6 +365,8 @@ class EzMemoryCLI:
                 return "voyageai"
             if choice == "OpenRouter":
                 return "openrouter"
+            if choice == "NVIDIA":
+                return "nvidia"
 
             # Defensive fallback
             return str(choice).lower()
@@ -408,6 +412,16 @@ class EzMemoryCLI:
                 "baai/bge-base-en-v1.5",
                 "baai/bge-large-en-v1.5",
                 "baai/bge-m3",
+            ]
+        elif provider.lower() == "nvidia":
+            models = [
+                "nvidia/llama-3_2-nemoretriever-300m-embed-v2",
+                "nvidia/llama-3_2-nemoretriever-300m-embed-v1",
+                "nvidia/nv-embed-v1",
+                "nvidia/nv-embedqa-e5-v5",
+                "nvidia/llama-3.2-nv-embedqa-1b-v2",
+                "nvidia/llama-3.2-nemoretriever-1b-vlm-embed-v1",
+                "nvidia/bge-m3",
             ]
         elif provider.lower() == "openai":
             models = [
@@ -511,6 +525,8 @@ class EzMemoryCLI:
                 provider.lower() == "openrouter" and existing_config.openrouter.api_key
             ):
                 existing_api_key = existing_config.openrouter.api_key
+            elif provider.lower() == "nvidia" and existing_config.nvidia.api_key:
+                existing_api_key = existing_config.nvidia.api_key
 
         # Get API key (skip if already exists)
         if existing_api_key:
@@ -542,6 +558,13 @@ class EzMemoryCLI:
                 base_url="https://openrouter.ai/api/v1",
                 http_referer=http_referer if http_referer else None,
                 site_name=site_name if site_name else None,
+                embedding_dimension=None,  # Will be detected
+            )
+        elif provider.lower() == "nvidia":
+            provider_config = NvidiaProviderConfig(
+                api_key=api_key,
+                model=model,
+                base_url="https://integrate.api.nvidia.com/v1",
                 embedding_dimension=None,  # Will be detected
             )
         elif provider.lower() == "voyageai":
@@ -586,6 +609,10 @@ class EzMemoryCLI:
             )
         elif provider.lower() == "openrouter":
             embedding_config.openrouter = OpenRouterProviderConfig(
+                **provider_config.model_dump()
+            )
+        elif provider.lower() == "nvidia":
+            embedding_config.nvidia = NvidiaProviderConfig(
                 **provider_config.model_dump()
             )
 
@@ -719,6 +746,13 @@ class EzMemoryCLI:
                 model=provider_config.model,
                 http_referer=provider_config.http_referer,
                 site_name=provider_config.site_name,
+            )
+        elif provider == "nvidia":
+            return NvidiaEmbedding(
+                api_key=provider_config.api_key,
+                model=provider_config.model,
+                base_url=provider_config.base_url,
+                embedding_dimension=provider_config.embedding_dimension,
             )
         else:
             raise ValueError(f"Unsupported embedding provider: {provider}")
@@ -1193,6 +1227,15 @@ class EzMemoryCLI:
             table.add_row(
                 "Site Name",
                 getattr(active_embedding, "site_name", None) or "none",
+            )
+        elif config.embedding.active_provider == "nvidia":
+            table.add_row(
+                "NVIDIA API Key",
+                self._format_secret_status(active_embedding.api_key),
+            )
+            table.add_row(
+                "NVIDIA Base URL",
+                getattr(active_embedding, "base_url", ""),
             )
 
         table.add_row(
@@ -1851,7 +1894,7 @@ class EzMemoryCLI:
                 elif choice == "Memory":
                     await self.memory_menu()
                     # Loop continues, showing menu again
-                elif choice == "Edit Embedding Provider":
+                elif choice == "Edit Embedding Model":
                     await self.edit_embedding_provider()
                     # Loop continues, showing menu again
                 elif choice == "Edit Vector Database":

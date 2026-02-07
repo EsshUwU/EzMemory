@@ -39,13 +39,22 @@ class OpenRouterProviderConfig(BaseModel):
     embedding_dimension: Optional[int] = Field(None, description="Vector dimension")
 
 
+class NvidiaProviderConfig(BaseModel):
+    """NVIDIA provider configuration (NIM / integrate API)."""
+    api_key: Optional[str] = Field(None, description="NVIDIA API key")
+    model: str = Field("nvidia/nv-embedqa-e5-v5", description="Model name")
+    base_url: str = Field("https://integrate.api.nvidia.com/v1", description="API base URL")
+    embedding_dimension: Optional[int] = Field(None, description="Vector dimension")
+
+
 class EmbeddingConfig(BaseModel):
     """Embedding configuration with support for multiple providers."""
     active_provider: str = Field("openai", description="Currently active provider")
     openai: OpenAIProviderConfig = Field(default_factory=OpenAIProviderConfig)
     voyageai: VoyageAIProviderConfig = Field(default_factory=VoyageAIProviderConfig)
     openrouter: OpenRouterProviderConfig = Field(default_factory=OpenRouterProviderConfig)
-    
+    nvidia: NvidiaProviderConfig = Field(default_factory=NvidiaProviderConfig)
+
     def get_active_config(self):
         """Get the configuration for the active provider."""
         if self.active_provider == "openai":
@@ -54,6 +63,8 @@ class EmbeddingConfig(BaseModel):
             return self.voyageai
         elif self.active_provider == "openrouter":
             return self.openrouter
+        elif self.active_provider == "nvidia":
+            return self.nvidia
         else:
             raise ValueError(f"Unknown provider: {self.active_provider}")
 
@@ -140,6 +151,12 @@ class ConfigManager:
                     "http_referer": None,
                     "site_name": None,
                     "embedding_dimension": None
+                },
+                "nvidia": {
+                    "api_key": None,
+                    "model": "nvidia/nv-embedqa-e5-v5",
+                    "base_url": "https://integrate.api.nvidia.com/v1",
+                    "embedding_dimension": None
                 }
             }
             
@@ -165,7 +182,14 @@ class ConfigManager:
                     "site_name": old_embedding.get("site_name"),
                     "embedding_dimension": old_embedding.get("embedding_dimension")
                 }
-            
+            elif provider == "nvidia":
+                new_embedding["nvidia"] = {
+                    "api_key": old_embedding.get("api_key"),
+                    "model": old_embedding.get("model", "nvidia/nv-embedqa-e5-v5"),
+                    "base_url": old_embedding.get("base_url", "https://integrate.api.nvidia.com/v1"),
+                    "embedding_dimension": old_embedding.get("embedding_dimension")
+                }
+
             data["embedding"] = new_embedding
         
         return data

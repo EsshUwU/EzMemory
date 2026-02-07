@@ -29,6 +29,7 @@ The embedding provider to use.
 - `"openai"` - OpenAI embeddings (requires API key)
 - `"voyageai"` - Voyage AI embeddings (requires API key)
 - `"openrouter"` - OpenRouter embeddings (requires API key)
+- `"nvidia"` - NVIDIA NIM / integrate API embeddings (requires API key)
 
 **Example:**
 ```json
@@ -59,6 +60,9 @@ The specific model to use for embeddings.
 **OpenRouter:**
 - `"google/gemini-embedding-001"` (768 dimensions, default)
 
+**NVIDIA:**
+- `"nvidia/nv-embedqa-e5-v5"` (default), `"nvidia/nv-embed-v1"`, `"nvidia/bge-m3"`, and others. Dimension is auto-detected at setup.
+
 **Example:**
 ```json
 "model": "text-embedding-3-small"
@@ -71,6 +75,7 @@ API key for the embedding provider.
 - OpenAI: https://platform.openai.com/api-keys
 - VoyageAI: https://dash.voyageai.com/
 - OpenRouter: https://openrouter.ai/keys
+- NVIDIA: https://build.nvidia.com/ (API key for integrate API)
 
 **Example:**
 ```json
@@ -450,6 +455,6 @@ Make sure to run the initialization setup first. The collection is created durin
 
 ### API key errors
 - Verify your API key is correct and has proper permissions
-- Check that you're using the right provider (openai, voyageai, openrouter)
+- Check that you're using the right provider (openai, voyageai, openrouter, nvidia)
 - Ensure your API key has sufficient credits/quota
 """
