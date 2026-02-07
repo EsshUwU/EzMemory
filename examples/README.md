@@ -1,70 +1,141 @@
 # EzMemory Examples
 
-This directory contains example scripts demonstrating how to use EzMemory.
+This directory contains **SDK-focused** examples for EzMemory. They assume
+you've installed the package from PyPI and are importing it in your own code.
+
+The distribution name is `ezmemory`, and the recommended import is:
+
+```python
+from ezmemory import Memory, MemoryEncoder, MemoryStorage, MemoryRetrieval
+```
+
+You can also import the underlying package directly:
+
+```python
+import memory_service
+```
 
 ## Prerequisites
 
-Make sure you've run the setup first:
+Install the core package:
 
 ```bash
-python ezmemory.py
+pip install ezmemory
 ```
+
+Depending on which example you run, you may also need:
+
+- OpenAI: `pip install openai`
+- VoyageAI: `pip install voyageai`
+- Qdrant: `pip install qdrant-client`
 
 ## Examples
 
-### basic_usage.py
+### `basic_usage.py` – SDK + EzMemory config file
 
-Demonstrates core functionality:
-- Loading configuration
-- Initializing components
-- Adding memories
-- Searching memories
-- Listing all memories
-- Deleting memories
+Uses the **EzMemory config file** created by the CLI to:
 
-Run it:
+- Load configuration (`~/.ezmemory/config.json`)
+- Initialize the active embedding provider (OpenAI, VoyageAI, or OpenRouter)
+- Initialize the configured vector store (Qdrant, Pinecone, or Zilliz)
+- Add, search, list, and delete memories
+
+Run:
+
 ```bash
+python -m memory_service.main   # one-time setup wizard
 python examples/basic_usage.py
 ```
 
-## Creating Your Own Scripts
+### `sdk_openai_qdrant.py` – pure SDK, OpenAI + Qdrant
 
-Here's a minimal template:
+Does **not** depend on EzMemory’s config file. You wire everything up yourself
+using environment variables and the SDK classes:
+
+- `OpenAIEmbedding`
+- `QdrantVectorStore`
+- `Memory`, `MemoryEncoder`, `MemoryStorage`, `MemoryRetrieval`
+
+Environment:
+
+- `OPENAI_API_KEY` (required)
+- `QDRANT_URL` / `QDRANT_API_KEY` (optional, for Qdrant Cloud)
+- `QDRANT_HOST` / `QDRANT_PORT` (optional, defaults to `localhost:6333`)
+
+Run:
+
+```bash
+python examples/sdk_openai_qdrant.py
+```
+
+### `sdk_voyage_qdrant.py` – pure SDK, VoyageAI + Qdrant
+
+Same pattern as above but using VoyageAI:
+
+- `VoyageEmbedding`
+- `QdrantVectorStore`
+
+Environment:
+
+- `VOYAGE_API_KEY` (required)
+- Qdrant variables as above
+
+Run:
+
+```bash
+python examples/sdk_voyage_qdrant.py
+```
+
+### `sdk_openrouter_qdrant.py` – pure SDK, OpenRouter + Qdrant
+
+Uses OpenRouter as the embedding provider:
+
+- `OpenRouterEmbedding`
+- `QdrantVectorStore`
+
+Environment:
+
+- `OPENROUTER_API_KEY` (required)
+- `OPENROUTER_REFERRER` / `OPENROUTER_SITE` (optional, for rankings)
+- Qdrant variables as above
+
+Run:
+
+```bash
+python examples/sdk_openrouter_qdrant.py
+```
+
+## Minimal SDK template
+
+Here is a minimal pattern you can adapt in your own project (OpenAI + Qdrant):
 
 ```python
-from src.memory_service.config import config_manager
-from src.memory_service.embeddings import OpenAIEmbedding
-from src.memory_service.vector_store import QdrantVectorStore
-from src.memory_service.memory import Memory, MemoryEncoder, MemoryStorage, MemoryRetrieval
-
-# Load config
-config = config_manager.load()
-
-# Initialize components
-embedding = OpenAIEmbedding(
-    api_key=config.embedding.api_key,
-    model=config.embedding.model
-)
-vector_store = QdrantVectorStore(
-    host=config.vector_store.host,
-    port=config.vector_store.port
+from ezmemory import (
+    Memory,
+    MemoryEncoder,
+    MemoryStorage,
+    MemoryRetrieval,
+    OpenAIEmbedding,
+    QdrantVectorStore,
 )
 
-# Create memory system
+embedding = OpenAIEmbedding(api_key="sk-...", model="text-embedding-3-small")
+vector_store = QdrantVectorStore(host="localhost", port=6333)
+
+collection = "my_memory_collection"
+if not vector_store.collection_exists(collection):
+    vector_store.create_collection(
+        collection_name=collection,
+        vector_size=embedding.get_dimension(),
+        distance_metric="cosine",
+    )
+
 encoder = MemoryEncoder(embedding)
-storage = MemoryStorage(vector_store, config.vector_store.collection_name)
-retrieval = MemoryRetrieval(vector_store, config.vector_store.collection_name)
+storage = MemoryStorage(vector_store, collection)
+retrieval = MemoryRetrieval(vector_store, collection)
 
-# Use it!
 memory = Memory(content="Your content here")
 memory = encoder.encode(memory)
 memory_id = storage.store(memory)
 ```
 
-## More Examples Coming Soon
-
-- Advanced search with filtering
-- Memory lifecycle management
-- Batch operations
-- Integration with LangChain
-- Integration with LlamaIndex
