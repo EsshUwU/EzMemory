@@ -1,6 +1,8 @@
 """Gemini embedding provider using the Google AI Gemini API."""
 
 from typing import List, Optional, Union
+from google import genai
+from google.genai import types
 
 from .base import EmbeddingProvider
 
@@ -24,8 +26,6 @@ class GeminiEmbedding(EmbeddingProvider):
             embedding_dimension: Optional output dimension (768, 1536, or 3072)
             task_type: Optional task type (RETRIEVAL_QUERY, RETRIEVAL_DOCUMENT, etc.)
         """
-        from google import genai
-        from google.genai import types
 
         self._client = genai.Client(api_key=api_key)
         self._model = model
