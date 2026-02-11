@@ -13,10 +13,11 @@ DEFAULT_EMBEDDING_MODELS = {
     "voyageai": "voyage-4",  # Latest Voyage model
     "openrouter": "google/gemini-embedding-001",
     "nvidia": "nvidia/nv-embedqa-e5-v5",
+    "gemini": "gemini-embedding-001",
 }
 
 # Vector database settings
-DEFAULT_COLLECTION_NAME = "ezmemory_collection"
+DEFAULT_COLLECTION_NAME = "default_collection"
 
 # Default vector sizes for common models
 # NOTE: This is only a fallback for known models. You can manually specify
@@ -63,6 +64,9 @@ DEFAULT_VECTOR_SIZE = {
         "baai/bge-base-en-v1.5": 768,
         "baai/bge-large-en-v1.5": 1024,
         "baai/bge-m3": 1024,
+    },
+    "gemini": {
+        "gemini-embedding-001": 3072,
     },
 }
 

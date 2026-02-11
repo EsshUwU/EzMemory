@@ -12,6 +12,7 @@ pymilvus
 # Embedding providers
 voyageai
 openai
+google-genai
 
 # CLI dependencies
 rich

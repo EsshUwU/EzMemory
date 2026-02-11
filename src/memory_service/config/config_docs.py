@@ -30,6 +30,7 @@ The embedding provider to use.
 - `"voyageai"` - Voyage AI embeddings (requires API key)
 - `"openrouter"` - OpenRouter embeddings (requires API key)
 - `"nvidia"` - NVIDIA NIM / integrate API embeddings (requires API key)
+- `"gemini"` - Google Gemini embeddings (requires API key)
 
 **Example:**
 ```json
@@ -63,6 +64,9 @@ The specific model to use for embeddings.
 **NVIDIA:**
 - `"nvidia/nv-embedqa-e5-v5"` (default), `"nvidia/nv-embed-v1"`, `"nvidia/bge-m3"`, and others. Dimension is auto-detected at setup.
 
+**Gemini:**
+- `"gemini-embedding-001"` (3072 dimensions default, supports 768, 1536, or 3072 via `embedding_dimension`)
+
 **Example:**
 ```json
 "model": "text-embedding-3-small"
@@ -76,6 +80,7 @@ API key for the embedding provider.
 - VoyageAI: https://dash.voyageai.com/
 - OpenRouter: https://openrouter.ai/keys
 - NVIDIA: https://build.nvidia.com/ (API key for integrate API)
+- Gemini: https://aistudio.google.com/apikey
 
 **Example:**
 ```json

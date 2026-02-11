@@ -209,9 +209,26 @@ class ZillizVectorStore(VectorStore):
         ]
 
     def count(self, collection_name: str) -> int:
-        """Count vectors in collection."""
-        stats = self.client.get_collection_stats(collection_name=collection_name)
-        return int(stats.get("row_count", 0) or 0)
+        """
+        Count vectors in collection.
+
+        Uses a count(*) query instead of get_collection_stats because
+        Zilliz Cloud stats can return stale row counts due to eventual
+        consistency, especially shortly after inserts.
+        """
+        try:
+            result = self.client.query(
+                collection_name=collection_name,
+                filter="",
+                output_fields=["count(*)"],
+            )
+            if result and isinstance(result, list) and len(result) > 0:
+                return int(result[0].get("count(*)", 0))
+            return 0
+        except Exception:
+            # Fallback to stats if count(*) query fails
+            stats = self.client.get_collection_stats(collection_name=collection_name)
+            return int(stats.get("row_count", 0) or 0)
 
     def delete_all(self, collection_name: str) -> None:
         """

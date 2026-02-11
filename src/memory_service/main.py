@@ -27,15 +27,17 @@ from .config.settings import (
     Config,
     ConfigManager,
     EmbeddingConfig,
+    KnownCollectionInfo,
     OpenAIProviderConfig,
     VoyageAIProviderConfig,
     OpenRouterProviderConfig,
     NvidiaProviderConfig,
+    GeminiProviderConfig,
     VectorStoreConfig,
 )
 from .config.logging import setup_logging, get_logger
 from .config.config_docs import CONFIG_DOCS_CONTENT
-from .embeddings import VoyageEmbedding, OpenAIEmbedding, OpenRouterEmbedding, NvidiaEmbedding
+from .embeddings import VoyageEmbedding, OpenAIEmbedding, OpenRouterEmbedding, NvidiaEmbedding, GeminiEmbedding
 from .vector_store import QdrantVectorStore, PineconeVectorStore, ZillizVectorStore
 from .memory import Memory, MemoryEncoder, MemoryStorage, MemoryRetrieval
 from .memory.viewer import format_memory_for_display
@@ -136,15 +138,18 @@ class EzMemoryCLI:
             )
             sys.exit(1)
 
+        # Ask for collection name (optional)
+        name_prefix = await self._ask_collection_name()
+
         # Initialize collection with detected dimension
         self.console.print("\n[bold yellow]Setting up collection...[/bold yellow]\n")
         try:
             # Use detected dimension from embedding_config
             vector_size = self._get_vector_size(embedding_config)
 
-            # Generate collection name based on embedding model
+            # Generate collection name based on prefix + embedding model
             collection_name = self._get_collection_name(
-                embedding_config, vector_config.provider
+                embedding_config, vector_config.provider, name_prefix
             )
             vector_config.collection_name = collection_name
 
@@ -165,10 +170,23 @@ class EzMemoryCLI:
             self.console.print(f"✗ [red]Failed to create collection: {e}[/red]")
             sys.exit(1)
 
+        # Build known_collections entry
+        active_provider_config = embedding_config.get_active_config()
+        known_collections = {
+            collection_name: KnownCollectionInfo(
+                provider=embedding_config.active_provider,
+                model=active_provider_config.model,
+                dim=vector_size,
+                http_referer=getattr(active_provider_config, "http_referer", None),
+                site_name=getattr(active_provider_config, "site_name", None),
+            )
+        }
+
         # Create full config
         config = Config(
             embedding=embedding_config,
             vector_store=vector_config,
+            known_collections=known_collections,
         )
 
         # Save config
@@ -345,8 +363,7 @@ class EzMemoryCLI:
                     "VoyageAI",
                     "OpenRouter",
                     "NVIDIA",
-                    questionary.Separator(),
-                    "Gemini (coming soon)",
+                    "Gemini",
                     questionary.Separator(),
                     "Back",
                 ],
@@ -354,10 +371,6 @@ class EzMemoryCLI:
 
             if choice == "Back":
                 raise BackToMainMenu()
-
-            if choice == "Gemini (coming soon)":
-                self.console.print("[red]Gemini is not yet supported.[/red]\n")
-                continue
 
             if choice == "OpenAI":
                 return "openai"
@@ -367,6 +380,8 @@ class EzMemoryCLI:
                 return "openrouter"
             if choice == "NVIDIA":
                 return "nvidia"
+            if choice == "Gemini":
+                return "gemini"
 
             # Defensive fallback
             return str(choice).lower()
@@ -428,6 +443,10 @@ class EzMemoryCLI:
                 "text-embedding-3-large",
                 "text-embedding-3-small",
                 "text-embedding-ada-002",
+            ]
+        elif provider.lower() == "gemini":
+            models = [
+                "gemini-embedding-001",
             ]
         else:
             raise ValueError(f"Unsupported provider: {provider}")
@@ -527,6 +546,8 @@ class EzMemoryCLI:
                 existing_api_key = existing_config.openrouter.api_key
             elif provider.lower() == "nvidia" and existing_config.nvidia.api_key:
                 existing_api_key = existing_config.nvidia.api_key
+            elif provider.lower() == "gemini" and existing_config.gemini.api_key:
+                existing_api_key = existing_config.gemini.api_key
 
         # Get API key (skip if already exists)
         if existing_api_key:
@@ -565,6 +586,12 @@ class EzMemoryCLI:
                 api_key=api_key,
                 model=model,
                 base_url="https://integrate.api.nvidia.com/v1",
+                embedding_dimension=None,  # Will be detected
+            )
+        elif provider.lower() == "gemini":
+            provider_config = GeminiProviderConfig(
+                api_key=api_key,
+                model=model,
                 embedding_dimension=None,  # Will be detected
             )
         elif provider.lower() == "voyageai":
@@ -615,6 +642,10 @@ class EzMemoryCLI:
             embedding_config.nvidia = NvidiaProviderConfig(
                 **provider_config.model_dump()
             )
+        elif provider.lower() == "gemini":
+            embedding_config.gemini = GeminiProviderConfig(
+                **provider_config.model_dump()
+            )
 
         return embedding_config
 
@@ -655,10 +686,16 @@ class EzMemoryCLI:
         return DEFAULT_FALLBACK_DIMENSION
 
     def _get_collection_name(
-        self, embedding_config: EmbeddingConfig, vector_provider: Optional[str] = None
+        self,
+        embedding_config: EmbeddingConfig,
+        vector_provider: Optional[str] = None,
+        name_prefix: str = "default",
     ) -> str:
         """
-        Generate collection name based on embedding provider and model.
+        Generate collection name based on a user-chosen prefix, embedding provider,
+        and model.
+
+        Format: {name_prefix}_{provider}_{sanitized_model}
 
         For Pinecone, ensures name is:
         - 45 characters or less
@@ -680,12 +717,12 @@ class EzMemoryCLI:
                 .replace("-", "_")
                 .replace(".", "_")
             )
-            base_name = f"ezmemory_{provider}_{sanitized_model}".lower()
+            base_name = f"{name_prefix}_{provider}_{sanitized_model}".lower()
             return base_name
 
         # Default: use hyphens (works for Qdrant and others)
         sanitized_model = model.replace("/", "-").replace("_", "-").replace(".", "-")
-        base_name = f"ezmemory-{provider}-{sanitized_model}".lower()
+        base_name = f"{name_prefix}-{provider}-{sanitized_model}".lower()
 
         # Check if this is for Pinecone and needs length restriction
         if vector_provider == "pinecone" and len(base_name) > 45:
@@ -693,14 +730,82 @@ class EzMemoryCLI:
             import hashlib
 
             model_hash = hashlib.md5(model.encode()).hexdigest()[:8]
-            # Format: ezmemory-{provider}-{hash}
-            base_name = f"ezmemory-{provider}-{model_hash}".lower()
+            base_name = f"{name_prefix}-{provider}-{model_hash}".lower()
 
-            # If still too long, truncate provider
+            # If still too long, truncate prefix and provider
             if len(base_name) > 45:
-                base_name = f"ezmem-{provider[:3]}-{model_hash}".lower()
+                base_name = f"{name_prefix[:5]}-{provider[:3]}-{model_hash}".lower()
 
         return base_name
+
+    def _adapt_collection_name(
+        self, collection_name: str, vector_provider: str
+    ) -> str:
+        """
+        Transform an existing collection name to match the target vector DB
+        provider's naming rules.
+
+        - Zilliz: all separators become underscores
+        - Qdrant: all separators become hyphens
+        - Pinecone: all separators become hyphens + enforce 45-char limit
+        """
+        if vector_provider == "zilliz":
+            # Zilliz only allows letters, numbers, and underscores
+            adapted = collection_name.replace("-", "_").replace(".", "_")
+        else:
+            # Qdrant / Pinecone use hyphens
+            adapted = collection_name.replace("_", "-").replace(".", "-")
+
+        adapted = adapted.lower()
+
+        # Pinecone: enforce 45-character limit
+        if vector_provider == "pinecone" and len(adapted) > 45:
+            import hashlib
+
+            name_hash = hashlib.md5(collection_name.encode()).hexdigest()[:8]
+            # Keep as much of the start as possible + hash for uniqueness
+            adapted = f"{adapted[:36]}-{name_hash}"
+
+        return adapted
+
+    async def _ask_collection_name(self) -> str:
+        """
+        Ask user for a collection name prefix.
+
+        Rules:
+        - Press Enter for 'default'
+        - Max 10 characters
+        - Only alphabets allowed
+        """
+        self.console.print(
+            "\n[bold cyan]Collection Name[/bold cyan] "
+            "[dim](max 10 letters, alphabets only — press Enter for default)[/dim]"
+        )
+
+        while True:
+            name = await questionary.text(
+                "Collection name:",
+                default="",
+            ).ask_async()
+
+            if not name or not name.strip():
+                return "default"
+
+            name = name.strip()
+
+            if len(name) > 10:
+                self.console.print(
+                    "[red]Name must be 10 characters or less.[/red]"
+                )
+                continue
+
+            if not name.isalpha():
+                self.console.print(
+                    "[red]Name must contain only alphabets (a-z).[/red]"
+                )
+                continue
+
+            return name.lower()
 
     def _create_vector_store(self, config: VectorStoreConfig):
         """Create vector store instance."""
@@ -754,6 +859,12 @@ class EzMemoryCLI:
                 base_url=provider_config.base_url,
                 embedding_dimension=provider_config.embedding_dimension,
             )
+        elif provider == "gemini":
+            return GeminiEmbedding(
+                api_key=provider_config.api_key,
+                model=provider_config.model,
+                embedding_dimension=provider_config.embedding_dimension,
+            )
         else:
             raise ValueError(f"Unsupported embedding provider: {provider}")
 
@@ -779,18 +890,11 @@ class EzMemoryCLI:
         # Get vector size for the current embedding model
         vector_size = self._get_vector_size(config.embedding)
 
-        # Always auto-generate collection name based on current embedding model
-        collection_name = self._get_collection_name(
-            config.embedding, config.vector_store.provider
-        )
-
-        # Update config if needed (collection name or embedding dimension changed)
-        config_changed = False
-        if config.vector_store.collection_name != collection_name:
-            config.vector_store.collection_name = collection_name
-            config_changed = True
+        # Use collection name from config (set during setup / edit embedding)
+        collection_name = config.vector_store.collection_name
 
         # Save embedding dimension to provider config if it was auto-detected
+        config_changed = False
         if not active_config.embedding_dimension:
             active_config.embedding_dimension = vector_size
             config_changed = True
@@ -894,18 +998,11 @@ class EzMemoryCLI:
         # Get vector size for the current embedding model
         vector_size = self._get_vector_size(config.embedding)
 
-        # Always auto-generate collection name based on current embedding model
-        collection_name = self._get_collection_name(
-            config.embedding, config.vector_store.provider
-        )
-
-        # Update config if needed (collection name or embedding dimension changed)
-        config_changed = False
-        if config.vector_store.collection_name != collection_name:
-            config.vector_store.collection_name = collection_name
-            config_changed = True
+        # Use collection name from config (set during setup / edit embedding)
+        collection_name = config.vector_store.collection_name
 
         # Save embedding dimension to provider config if it was auto-detected
+        config_changed = False
         if not active_config.embedding_dimension:
             active_config.embedding_dimension = vector_size
             config_changed = True
@@ -1236,6 +1333,11 @@ class EzMemoryCLI:
             table.add_row(
                 "NVIDIA Base URL",
                 getattr(active_embedding, "base_url", ""),
+            )
+        elif config.embedding.active_provider == "gemini":
+            table.add_row(
+                "Gemini API Key",
+                self._format_secret_status(active_embedding.api_key),
             )
 
         table.add_row(
@@ -1631,7 +1733,124 @@ class EzMemoryCLI:
             # Load current config
             config = self.config_manager.load()
 
-            # Select new embedding provider and configure (includes dimension detection)
+            # ----------------------------------------------------------
+            # If known collections exist, offer to select an existing one
+            # ----------------------------------------------------------
+            if config.known_collections:
+                initial_choice = await questionary.select(
+                    "Choose an option:",
+                    choices=[
+                        "Configure new embedding",
+                        "Select existing collection",
+                        questionary.Separator(),
+                        "Back",
+                    ],
+                ).ask_async()
+
+                if initial_choice == "Back":
+                    return
+
+                if initial_choice == "Select existing collection":
+                    # Build display choices from known collections
+                    col_choices = []
+                    for name, info in config.known_collections.items():
+                        label = f"{name}  ({info.provider}/{info.model}, {info.dim}d)"
+                        col_choices.append(
+                            questionary.Choice(title=label, value=name)
+                        )
+                    col_choices.append(questionary.Separator())
+                    col_choices.append(
+                        questionary.Choice(title="Back", value="__back__")
+                    )
+
+                    selected = await questionary.select(
+                        "Select a collection:",
+                        choices=col_choices,
+                    ).ask_async()
+
+                    if selected == "__back__":
+                        return
+
+                    # Apply the selected collection's settings
+                    info = config.known_collections[selected]
+                    config.embedding.active_provider = info.provider
+
+                    # Update the provider-specific config
+                    active_cfg = config.embedding.get_active_config()
+                    active_cfg.model = info.model
+                    active_cfg.embedding_dimension = info.dim
+                    if info.provider == "openrouter" and hasattr(
+                        active_cfg, "http_referer"
+                    ):
+                        active_cfg.http_referer = info.http_referer
+                        active_cfg.site_name = info.site_name
+
+                    # Adapt the collection name for the current vector DB
+                    current_vdb = config.vector_store.provider
+                    adapted_name = self._adapt_collection_name(
+                        selected, current_vdb
+                    )
+
+                    if adapted_name != selected:
+                        self.console.print(
+                            f"\n[yellow]Collection name adapted for "
+                            f"{current_vdb}: {selected} → {adapted_name}[/yellow]"
+                        )
+                        # Also register the adapted name in known_collections
+                        config.known_collections[adapted_name] = info
+
+                    config.vector_store.collection_name = adapted_name
+
+                    # Ensure API key exists for the provider
+                    if (
+                        not active_cfg.api_key
+                        or not active_cfg.api_key.strip()
+                    ):
+                        api_key = await questionary.password(
+                            f"{info.provider.title()} API Key:",
+                        ).ask_async()
+                        active_cfg.api_key = api_key
+
+                    # Ensure collection exists in vector store
+                    self.console.print(
+                        "\n[bold yellow]Setting up collection...[/bold yellow]\n"
+                    )
+                    vector_store = self._create_vector_store(config.vector_store)
+                    if not vector_store.collection_exists(adapted_name):
+                        vector_store.create_collection(
+                            collection_name=adapted_name,
+                            vector_size=info.dim,
+                            distance_metric=config.vector_store.distance_metric,
+                        )
+                        self.console.print(
+                            f"✓ [green]Created collection: {adapted_name}[/green]"
+                        )
+                    else:
+                        self.console.print(
+                            f"✓ [green]Collection already exists: {adapted_name}[/green]"
+                        )
+
+                    self.config_manager.save(config)
+
+                    self.console.print(
+                        f"\n✓ [green]Switched to collection: {adapted_name}[/green]"
+                    )
+                    self._set_status(
+                        f"Collection switched · {info.provider}/{info.model} · "
+                        f"Collection: {adapted_name}"
+                    )
+
+                    # Pause so user can read the results
+                    self.console.print()
+                    self.console.print(
+                        "[dim]Press Enter to continue...[/dim]", end=""
+                    )
+                    await questionary.text("", default="").ask_async()
+                    return
+
+            # ----------------------------------------------------------
+            # Normal flow: select provider → model → collection name
+            # ----------------------------------------------------------
             embedding_provider = await self._select_embedding_provider()
             embedding_config = await self._configure_embedding(
                 embedding_provider, existing_config=config.embedding
@@ -1643,9 +1862,12 @@ class EzMemoryCLI:
             # Use detected dimension
             vector_size = self._get_vector_size(embedding_config)
 
-            # Generate new collection name
+            # Ask for collection name (optional)
+            name_prefix = await self._ask_collection_name()
+
+            # Generate full collection name
             collection_name = self._get_collection_name(
-                embedding_config, config.vector_store.provider
+                embedding_config, config.vector_store.provider, name_prefix
             )
             config.vector_store.collection_name = collection_name
 
@@ -1668,6 +1890,16 @@ class EzMemoryCLI:
                     f"✓ [green]Collection already exists: {collection_name}[/green]"
                 )
 
+            # Save to known_collections
+            active = embedding_config.get_active_config()
+            config.known_collections[collection_name] = KnownCollectionInfo(
+                provider=embedding_config.active_provider,
+                model=active.model,
+                dim=vector_size,
+                http_referer=getattr(active, "http_referer", None),
+                site_name=getattr(active, "site_name", None),
+            )
+
             # Save updated config
             self.config_manager.save(config)
 
@@ -1678,7 +1910,6 @@ class EzMemoryCLI:
                 f"[dim]Model and other settings can be edited in: {CONFIG_FILE}[/dim]\n"
             )
 
-            active = embedding_config.get_active_config()
             self._set_status(
                 f"Embedding updated · {embedding_config.active_provider}/{active.model} · "
                 f"Collection: {collection_name}"
@@ -1727,9 +1958,9 @@ class EzMemoryCLI:
             # Get vector size for current embedding model
             vector_size = self._get_vector_size(config.embedding)
 
-            # Generate collection name
+            # Regenerate collection name for the new vector provider format
             collection_name = self._get_collection_name(
-                config.embedding, config.vector_store.provider
+                config.embedding, config.vector_store.provider, "default"
             )
             config.vector_store.collection_name = collection_name
 

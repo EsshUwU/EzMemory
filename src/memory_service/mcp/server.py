@@ -28,7 +28,7 @@ class MemoryMCPServer:
         @self.mcp.tool()
         async def add_memory(content: Annotated[str, "The content to store in memory"]) -> dict:
             """
-            add_memorry is an MCP tool, this should be called everytime the user informs anything 
+            add_memory is an MCP tool, this should be called everytime the user informs anything 
             about themselves, their preferences, or anything that has any relevant information 
             which can be useful in the future conversation. This can also be called when the 
             user asks you to remember something.

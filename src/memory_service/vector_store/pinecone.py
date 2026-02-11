@@ -159,31 +159,59 @@ class PineconeVectorStore(VectorStore):
         offset: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Get all vectors from index.
-        
-        Note: Pinecone doesn't have a direct "get all" method.
-        This implementation uses fetch with IDs or queries with pagination.
-        For large datasets, consider using list_paginated() with a query.
+        Get all vectors from index using list_paginated + fetch.
+
+        Lists vector IDs with pagination, then fetches metadata in batches.
         """
         index = self._get_index(collection_name)
-        
-        # Get index stats to understand the data
-        stats = index.describe_index_stats()
-        total_count = stats.total_vector_count
-        
-        # Pinecone doesn't support direct "get all" efficiently
-        # We'll return empty list for now and recommend using search instead
-        # For a production implementation, you'd need to maintain an external ID list
-        # or use Pinecone's list() method with pagination
-        
-        # Alternative: Use a dummy query to get results
-        # This is not ideal but works for small datasets
-        if total_count > 0 and limit:
-            # Create a zero vector for querying
-            # This is a workaround - in production, maintain ID lists externally
+
+        # Collect vector IDs using list_paginated
+        all_ids: List[str] = []
+        pagination_token = None
+
+        while True:
+            list_kwargs: Dict[str, Any] = {"prefix": "", "limit": 100}
+            if pagination_token:
+                list_kwargs["pagination_token"] = pagination_token
+
+            response = index.list_paginated(**list_kwargs)
+
+            if response.vectors:
+                all_ids.extend([v.id for v in response.vectors])
+
+            if response.pagination and response.pagination.next:
+                pagination_token = response.pagination.next
+            else:
+                break
+
+        # Apply offset and limit
+        if offset:
+            all_ids = all_ids[offset:]
+        if limit:
+            all_ids = all_ids[:limit]
+
+        if not all_ids:
             return []
-        
-        return []
+
+        # Fetch vectors with metadata in batches of 100
+        results: List[Dict[str, Any]] = []
+        for i in range(0, len(all_ids), 100):
+            batch = all_ids[i : i + 100]
+            fetch_response = index.fetch(ids=batch)
+
+            for vec_id in batch:
+                if vec_id in fetch_response.vectors:
+                    vec = fetch_response.vectors[vec_id]
+                    results.append(
+                        {
+                            "id": vec.id,
+                            "payload": self._unflatten_metadata(
+                                vec.metadata or {}
+                            ),
+                        }
+                    )
+
+        return results
     
     def count(self, collection_name: str) -> int:
         """Count vectors in index."""

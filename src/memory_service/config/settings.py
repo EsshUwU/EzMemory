@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 from .constants import (
     CONFIG_DIR,
@@ -47,6 +47,13 @@ class NvidiaProviderConfig(BaseModel):
     embedding_dimension: Optional[int] = Field(None, description="Vector dimension")
 
 
+class GeminiProviderConfig(BaseModel):
+    """Gemini provider configuration (Google AI API)."""
+    api_key: Optional[str] = Field(None, description="Google AI / Gemini API key")
+    model: str = Field("gemini-embedding-001", description="Model name")
+    embedding_dimension: Optional[int] = Field(None, description="Vector dimension (768, 1536, or 3072)")
+
+
 class EmbeddingConfig(BaseModel):
     """Embedding configuration with support for multiple providers."""
     active_provider: str = Field("openai", description="Currently active provider")
@@ -54,6 +61,7 @@ class EmbeddingConfig(BaseModel):
     voyageai: VoyageAIProviderConfig = Field(default_factory=VoyageAIProviderConfig)
     openrouter: OpenRouterProviderConfig = Field(default_factory=OpenRouterProviderConfig)
     nvidia: NvidiaProviderConfig = Field(default_factory=NvidiaProviderConfig)
+    gemini: GeminiProviderConfig = Field(default_factory=GeminiProviderConfig)
 
     def get_active_config(self):
         """Get the configuration for the active provider."""
@@ -65,6 +73,8 @@ class EmbeddingConfig(BaseModel):
             return self.openrouter
         elif self.active_provider == "nvidia":
             return self.nvidia
+        elif self.active_provider == "gemini":
+            return self.gemini
         else:
             raise ValueError(f"Unknown provider: {self.active_provider}")
 
@@ -104,6 +114,15 @@ class MCPConfig(BaseModel):
     auto_start: bool = Field(False, description="Auto-start server on init")
 
 
+class KnownCollectionInfo(BaseModel):
+    """Information about a known/saved collection."""
+    provider: str = Field(..., description="Embedding provider name")
+    model: str = Field(..., description="Embedding model name")
+    dim: int = Field(..., description="Embedding dimension")
+    http_referer: Optional[str] = Field(None, description="HTTP referer (OpenRouter)")
+    site_name: Optional[str] = Field(None, description="Site name (OpenRouter)")
+
+
 class Config(BaseModel):
     """Main configuration."""
     embedding: EmbeddingConfig
@@ -111,6 +130,9 @@ class Config(BaseModel):
     search: SearchConfig = Field(default_factory=SearchConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     mcp: MCPConfig = Field(default_factory=MCPConfig)
+    known_collections: Dict[str, KnownCollectionInfo] = Field(
+        default_factory=dict, description="Saved collections with their embedding info"
+    )
 
 
 class ConfigManager:
@@ -157,6 +179,11 @@ class ConfigManager:
                     "model": "nvidia/nv-embedqa-e5-v5",
                     "base_url": "https://integrate.api.nvidia.com/v1",
                     "embedding_dimension": None
+                },
+                "gemini": {
+                    "api_key": None,
+                    "model": "gemini-embedding-001",
+                    "embedding_dimension": None
                 }
             }
             
@@ -187,6 +214,12 @@ class ConfigManager:
                     "api_key": old_embedding.get("api_key"),
                     "model": old_embedding.get("model", "nvidia/nv-embedqa-e5-v5"),
                     "base_url": old_embedding.get("base_url", "https://integrate.api.nvidia.com/v1"),
+                    "embedding_dimension": old_embedding.get("embedding_dimension")
+                }
+            elif provider == "gemini":
+                new_embedding["gemini"] = {
+                    "api_key": old_embedding.get("api_key"),
+                    "model": old_embedding.get("model", "gemini-embedding-001"),
                     "embedding_dimension": old_embedding.get("embedding_dimension")
                 }
 

@@ -3,6 +3,7 @@ from .voyage import VoyageEmbedding
 from .openai_embedding import OpenAIEmbedding
 from .openrouter import OpenRouterEmbedding
 from .nvidia import NvidiaEmbedding
+from .gemini import GeminiEmbedding
 
 __all__ = [
     "EmbeddingProvider",
@@ -10,4 +11,5 @@ __all__ = [
     "OpenAIEmbedding",
     "OpenRouterEmbedding",
     "NvidiaEmbedding",
+    "GeminiEmbedding",
 ]
