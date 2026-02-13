@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from memory_service import (  # type: ignore[assignment]
+from memory_service import (  
     __version__,
     Config,
     ConfigManager,

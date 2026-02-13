@@ -10,7 +10,8 @@ This file explains all configuration options available in `config.json`.
   "vector_store": { ... },
   "search": { ... },
   "memory": { ... },
-  "mcp": { ... }
+  "mcp": { ... },
+  "known_collections": { ... }
 }
 ```
 
@@ -20,10 +21,12 @@ This file explains all configuration options available in `config.json`.
 
 Configure the embedding provider used to convert text into vector embeddings.
 
+EzMemory uses a **nested provider structure**: you set `active_provider` to choose which provider is used, and each provider has its own config block. This lets you pre-configure multiple providers and switch between them without re-entering API keys.
+
 ### Fields
 
-#### `provider` (string, required)
-The embedding provider to use.
+#### `active_provider` (string, required)
+The embedding provider currently in use.
 
 **Available options:**
 - `"openai"` - OpenAI embeddings (requires API key)
@@ -34,13 +37,43 @@ The embedding provider to use.
 
 **Example:**
 ```json
-"provider": "openai"
+"active_provider": "openai"
 ```
 
-#### `model` (string, required)
-The specific model to use for embeddings.
+#### Provider-specific config blocks
 
-**Available models by provider:**
+Each provider has its own nested config. Only the active provider's config is used at runtime.
+
+**`openai`** – OpenAI provider config:
+- `api_key` (string, optional) – OpenAI API key
+- `model` (string) – Model name, default `"text-embedding-3-small"`
+- `embedding_dimension` (integer, optional) – Override vector dimension
+
+**`voyageai`** – Voyage AI provider config:
+- `api_key` (string, optional) – Voyage AI API key
+- `model` (string) – Model name, default `"voyage-4"`
+- `embedding_dimension` (integer, optional) – Override vector dimension
+
+**`openrouter`** – OpenRouter provider config:
+- `api_key` (string, optional) – OpenRouter API key
+- `model` (string) – Model name, default `"google/gemini-embedding-001"`
+- `base_url` (string) – API base URL, default `"https://openrouter.ai/api/v1"`
+- `http_referer` (string, optional) – HTTP referer for rankings
+- `site_name` (string, optional) – Site name for rankings
+- `embedding_dimension` (integer, optional) – Override vector dimension
+
+**`nvidia`** – NVIDIA provider config:
+- `api_key` (string, optional) – NVIDIA API key
+- `model` (string) – Model name, default `"nvidia/nv-embedqa-e5-v5"`
+- `base_url` (string) – API base URL, default `"https://integrate.api.nvidia.com/v1"`
+- `embedding_dimension` (integer, optional) – Override vector dimension
+
+**`gemini`** – Gemini provider config:
+- `api_key` (string, optional) – Google AI / Gemini API key
+- `model` (string) – Model name, default `"gemini-embedding-001"`
+- `embedding_dimension` (integer, optional) – 768, 1536, or 3072
+
+### Available models by provider
 
 **OpenAI:**
 - `"text-embedding-3-small"` (1536 dimensions, default, recommended)
@@ -48,95 +81,51 @@ The specific model to use for embeddings.
 - `"text-embedding-ada-002"` (1536 dimensions, legacy)
 
 **VoyageAI:**
-- `"voyage-4"` (1024 dimensions default, best general purpose - latest)
-- `"voyage-4-large"` (1024 dimensions default, highest quality - latest)
-- `"voyage-4-lite"` (1024 dimensions default, cost optimized - latest)
-- `"voyage-code-4"` (1024 dimensions default, optimized for code - latest)
-- `"voyage-3"` (1024 dimensions, general purpose)
+- `"voyage-4"` (1024 dimensions, default, best general purpose)
+- `"voyage-4-large"` (1024 dimensions, highest quality)
+- `"voyage-3.5"`, `"voyage-3.5-lite"` (1024 dimensions)
+- `"voyage-3"`, `"voyage-3-large"` (1024 dimensions)
 - `"voyage-3-lite"` (512 dimensions, faster)
-- `"voyage-code-3"` (1024 dimensions, optimized for code)
+- `"voyage-large-2"`, `"voyage-large-2-instruct"`, `"voyage-2"`, `"voyage-01"`
 
 **Note:** Voyage 4 series models support multiple dimensions (256, 512, 1024, 2048). Set `embedding_dimension` to use non-default sizes.
 
 **OpenRouter:**
-- `"google/gemini-embedding-001"` (768 dimensions, default)
+- `"google/gemini-embedding-001"` (3072 dimensions, default)
+- `"openai/text-embedding-3-small"`, `"openai/text-embedding-3-large"`, `"openai/text-embedding-ada-002"`
+- `"mistralai/mistral-embed-2312"`, `"mistralai/codestral-embed-2505"`
+- `"qwen/qwen3-embedding-8b"`, `"qwen/qwen3-embedding-4b"`
+- `"thenlper/gte-base"`, `"thenlper/gte-large"`
+- `"baai/bge-base-en-v1.5"`, `"baai/bge-large-en-v1.5"`, `"baai/bge-m3"`
+- And many more via https://openrouter.ai/models
 
 **NVIDIA:**
-- `"nvidia/nv-embedqa-e5-v5"` (default), `"nvidia/nv-embed-v1"`, `"nvidia/bge-m3"`, and others. Dimension is auto-detected at setup.
+- `"nvidia/nv-embedqa-e5-v5"` (default), `"nvidia/nv-embed-v1"`
+- `"nvidia/llama-3_2-nemoretriever-300m-embed-v2"`, `"nvidia/llama-3_2-nemoretriever-300m-embed-v1"`
+- `"nvidia/llama-3.2-nv-embedqa-1b-v2"`, `"nvidia/llama-3.2-nemoretriever-1b-vlm-embed-v1"`
+- `"nvidia/bge-m3"` – Dimension is auto-detected at setup.
 
 **Gemini:**
 - `"gemini-embedding-001"` (3072 dimensions default, supports 768, 1536, or 3072 via `embedding_dimension`)
 
-**Example:**
-```json
-"model": "text-embedding-3-small"
-```
+### API key sources
 
-#### `api_key` (string, required)
-API key for the embedding provider.
-
-**How to get:**
 - OpenAI: https://platform.openai.com/api-keys
 - VoyageAI: https://dash.voyageai.com/
 - OpenRouter: https://openrouter.ai/keys
 - NVIDIA: https://build.nvidia.com/ (API key for integrate API)
 - Gemini: https://aistudio.google.com/apikey
 
-**Example:**
-```json
-"api_key": "sk-..."
-```
+### `embedding_dimension` (integer, optional)
 
-#### `base_url` (string, optional)
-Custom base URL for the API. Only used for OpenRouter.
-
-**Default:** `null`
-
-**Example:**
-```json
-"base_url": "https://openrouter.ai/api/v1"
-```
-
-#### `http_referer` (string, optional)
-HTTP referer for rankings on OpenRouter. Only used for OpenRouter.
-
-**Default:** `null`
-
-**Example:**
-```json
-"http_referer": "https://yourdomain.com"
-```
-
-#### `site_name` (string, optional)
-Site name for rankings on OpenRouter. Only used for OpenRouter.
-
-**Default:** `null`
-
-**Example:**
-```json
-"site_name": "My App"
-```
-
-#### `embedding_dimension` (integer, optional)
-The vector dimension size for embeddings. If not specified, the system will auto-detect based on the model.
+The vector dimension size for embeddings. If not specified, the system auto-detects based on the model.
 
 **When to set this:**
 - Using a model not in the default list
-- Using a model that supports multiple dimensions (e.g., Voyage 4 supports 256, 512, 1024, 2048)
+- Using a model that supports multiple dimensions (e.g., Voyage 4: 256, 512, 1024, 2048)
 - Want to override the default dimension for a known model
 
 **Default:** Auto-detected based on model, or 1024 if unknown
-
-**Common dimensions:**
-- OpenAI `text-embedding-3-small`: 1536
-- OpenAI `text-embedding-3-large`: 3072
-- Voyage 3/4 series: 1024 (default), also supports 256, 512, 2048
-- Gemini embedding: 768
-
-**Example:**
-```json
-"embedding_dimension": 1024
-```
 
 **Note:** If you change this value, you'll need to recreate your collection with the new dimension.
 
@@ -152,104 +141,63 @@ Configure the vector database used to store and search embeddings.
 The vector store provider to use.
 
 **Available options:**
-- `"qdrant"` - Qdrant vector database (currently supported)
+- `"qdrant"` – Qdrant (local or cloud)
+- `"pinecone"` – Pinecone serverless
+- `"zilliz"` – Zilliz Cloud (Milvus)
 
 **Coming soon:**
-- `"pinecone"` - Pinecone vector database
-- `"local"` - Local file-based storage
+- `"local"` – Local file-based storage
 
 **Example:**
 ```json
 "provider": "qdrant"
 ```
 
-#### `host` (string, optional)
-Host address for self-hosted Qdrant instance.
+#### Qdrant-specific fields
 
-**Default:** `"localhost"`
+**`host`** (string, optional) – Host for self-hosted Qdrant. Use with `port`. **Default:** `"localhost"`
 
-**Example:**
-```json
-"host": "localhost"
-```
+**`port`** (integer, optional) – Port for self-hosted Qdrant. **Default:** `6333`
 
-#### `port` (integer, optional)
-Port number for self-hosted Qdrant instance.
+**`url`** (string, optional) – Full URL for Qdrant Cloud. Use instead of host/port for cloud.
 
-**Default:** `6333`
+**`api_key`** (string, optional) – API key for Qdrant Cloud.
 
-**Example:**
-```json
-"port": 6333
-```
+**`prefer_grpc`** (boolean, optional) – Use gRPC for better performance. **Default:** `false`
 
-#### `url` (string, optional)
-Full URL for Qdrant Cloud instances. Use this instead of host/port for cloud.
+#### Pinecone-specific fields
 
-**Default:** `null`
+**`api_key`** (string, required) – Pinecone API key.
 
-**Example:**
-```json
-"url": "https://your-cluster.cloud.qdrant.io"
-```
+**`cloud`** (string, optional) – Cloud provider: `"aws"`, `"gcp"`, or `"azure"`. **Default:** `"aws"`
 
-#### `api_key` (string, optional)
-API key for Qdrant Cloud instances.
+**`region`** (string, optional) – Cloud region, e.g. `"us-east-1"`, `"us-central1"`, `"eastus"`. **Default:** `"us-east-1"` (aws)
 
-**Default:** `null`
+#### Zilliz-specific fields
 
-**Example:**
-```json
-"api_key": "your-qdrant-api-key"
-```
+**`url`** (string, required) – Zilliz Cloud URI, e.g. `https://...zillizcloud.com:19530`
 
-#### `collection_name` (string, auto-generated)
-Name of the collection to store memories in. **This is automatically generated and managed by the system.**
+**`api_key`** (string, required) – Zilliz token (user:password or API key)
 
-**Auto-generated format:** `ezmemory_{provider}_{model}`
-- The collection name is automatically generated based on your embedding provider and model
-- This ensures each embedding model gets its own collection (since different models produce different vector dimensions)
-- When you change your embedding model in the config, the collection name updates automatically
-- Examples:
-  - `ezmemory_openai_text_embedding_3_small`
-  - `ezmemory_voyageai_voyage_4`
-  - `ezmemory_openrouter_text_embedding_3_large`
+#### Common fields (all providers)
 
-**Important:** Do not manually edit this field. It will be automatically updated to match your embedding configuration.
+**`collection_name`** (string)
+Name of the collection/index. Auto-generated during setup based on embedding provider and model, or chosen when selecting an existing collection.
 
-#### `distance_metric` (string, optional)
-Distance metric used for similarity search.
+**Format:** `{prefix}-{provider}-{model}` (e.g. `default-openai-text-embedding-3-small`)
+
+**Important:** Do not manually edit unless switching to a known collection. Use "Edit Embedding Model" → "Select existing collection" in the CLI to switch.
+
+**`distance_metric`** (string, optional)
+Distance metric for similarity search.
 
 **Available options:**
-- `"cosine"` - Cosine similarity (default, recommended for text)
-  - Range: 0 to 2 (higher is more similar)
-  - Best for normalized vectors like text embeddings
-- `"euclid"` - Euclidean distance
-  - Range: 0 to ∞ (lower is more similar)
-  - Good for spatial data, image features
-- `"dot"` - Dot product
-  - Range: -∞ to ∞ (higher is more similar)
-  - Good for recommendations, unnormalized vectors
-- `"manhattan"` - Manhattan distance
-  - Range: 0 to ∞ (lower is more similar)
-  - Good for sparse features, discrete data
+- `"cosine"` – Cosine similarity (default, recommended for text)
+- `"euclid"` – Euclidean distance
+- `"dot"` – Dot product
+- `"manhattan"` – Manhattan distance
 
 **Default:** `"cosine"`
-
-**Example:**
-```json
-"distance_metric": "cosine"
-```
-
-#### `prefer_grpc` (boolean, optional)
-Whether to use gRPC instead of HTTP for better performance.
-
-**Default:** `false`
-
-**Example:**
-```json
-"prefer_grpc": true
-```
 
 ---
 
@@ -284,7 +232,7 @@ Minimum similarity score for results. Results below this threshold are filtered 
 ```
 
 #### `hnsw_ef` (integer, optional)
-HNSW algorithm ef parameter for search. Higher values = better accuracy but slower.
+HNSW algorithm ef parameter for search. Higher values = better accuracy but slower. **Qdrant only** (ignored by Pinecone/Zilliz).
 
 **Default:** `null` (uses Qdrant default)
 
@@ -375,40 +323,83 @@ Whether to automatically start the MCP server on initialization.
 
 ---
 
+## Known Collections
+
+**`known_collections`** (object, auto-managed)
+Maps collection names to their embedding metadata. Used when switching between collections via "Edit Embedding Model" → "Select existing collection".
+
+**Structure:** `{ "collection_name": { "provider": "...", "model": "...", "dim": N, "http_referer": "...", "site_name": "..." } }`
+
+**Important:** Do not manually edit. This is populated and updated by the setup wizard and when editing embedding/collection settings.
+
+---
+
 ## Complete Example
 
-Here's a complete example configuration:
-
+**Qdrant Cloud:**
 ```json
 {
   "embedding": {
-    "provider": "openai",
-    "model": "text-embedding-3-small",
-    "api_key": "sk-..."
+    "active_provider": "openai",
+    "openai": {
+      "api_key": "sk-...",
+      "model": "text-embedding-3-small",
+      "embedding_dimension": null
+    },
+    "voyageai": {
+      "api_key": null,
+      "model": "voyage-4",
+      "embedding_dimension": null
+    },
+    "openrouter": {},
+    "nvidia": {},
+    "gemini": {}
   },
   "vector_store": {
     "provider": "qdrant",
-    "host": "localhost",
-    "port": 6333,
-    "collection_name": "ezmemory_openai_text_embedding_3_small",
+    "host": null,
+    "port": null,
+    "url": "https://your-cluster.cloud.qdrant.io",
+    "api_key": "your-qdrant-api-key",
+    "collection_name": "default-openai-text-embedding-3-small",
     "distance_metric": "cosine",
     "prefer_grpc": false
   },
-  "search": {
-    "default_limit": 5,
-    "score_threshold": null,
-    "hnsw_ef": null
+  "search": { "default_limit": 5, "score_threshold": null, "hnsw_ef": null },
+  "memory": { "ttl_days": 90, "enable_decay": false, "decay_factor": 0.95 },
+  "mcp": { "host": "localhost", "port": 8080, "auto_start": false },
+  "known_collections": {}
+}
+```
+
+**Pinecone:**
+```json
+{
+  "embedding": { "active_provider": "voyageai", ... },
+  "vector_store": {
+    "provider": "pinecone",
+    "api_key": "your-pinecone-api-key",
+    "cloud": "aws",
+    "region": "us-east-1",
+    "collection_name": "default-voyageai-voyage-4",
+    "distance_metric": "cosine"
   },
-  "memory": {
-    "ttl_days": 90,
-    "enable_decay": false,
-    "decay_factor": 0.95
+  ...
+}
+```
+
+**Zilliz:**
+```json
+{
+  "embedding": { "active_provider": "gemini", ... },
+  "vector_store": {
+    "provider": "zilliz",
+    "url": "https://xxx.zillizcloud.com:19530",
+    "api_key": "user:password",
+    "collection_name": "default_gemini_gemini_embedding_001",
+    "distance_metric": "cosine"
   },
-  "mcp": {
-    "host": "localhost",
-    "port": 8080,
-    "auto_start": false
-  }
+  ...
 }
 ```
 
@@ -417,7 +408,7 @@ Here's a complete example configuration:
 ## Tips and Best Practices
 
 1. **Choose the right embedding model:**
-   - For most use cases, `text-embedding-3-small` (OpenAI) or `voyage-3` (VoyageAI) are good defaults
+   - For most use cases, `text-embedding-3-small` (OpenAI) or `voyage-4` (VoyageAI) are good defaults
    - Use larger models for higher quality at the cost of speed and cost
    - Use specialized models (code, finance, law) for domain-specific content
 
@@ -439,7 +430,10 @@ Here's a complete example configuration:
 5. **Performance:**
    - Enable `prefer_grpc` for better performance with Qdrant
    - Use local Qdrant instance for development (Docker)
-   - Use Qdrant Cloud for production
+   - Use Qdrant Cloud, Pinecone, or Zilliz for production
+
+6. **Switching collections:**
+   - Use "Edit Embedding Model" → "Select existing collection" to switch between pre-configured collections without re-entering API keys
 
 ---
 
@@ -449,7 +443,7 @@ Here's a complete example configuration:
 Make sure to run the initialization setup first. The collection is created during setup.
 
 ### Slow searches
-- Try enabling `prefer_grpc` in vector_store config
+- Try enabling `prefer_grpc` in vector_store config (Qdrant only)
 - Lower the `default_limit` in search config
 - Consider using a smaller embedding model
 
@@ -460,6 +454,10 @@ Make sure to run the initialization setup first. The collection is created durin
 
 ### API key errors
 - Verify your API key is correct and has proper permissions
-- Check that you're using the right provider (openai, voyageai, openrouter, nvidia)
+- Check that you're using the right provider (openai, voyageai, openrouter, nvidia, gemini)
 - Ensure your API key has sufficient credits/quota
+
+### Pinecone / Zilliz connection errors
+- For Pinecone: ensure `cloud` and `region` match your index setup
+- For Zilliz: ensure `url` includes the port (e.g. `:19530`) and `api_key` is the correct token
 """
