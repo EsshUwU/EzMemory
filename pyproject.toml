@@ -1,7 +1,8 @@
 [project]
 name = "ezmemory"
-version = "0.1.1"
+version = "0.1.5"
 description = "AI Agent Memory System with embeddings and vector storage"
+readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "fastmcp>=2.14.4",
@@ -26,8 +27,10 @@ dependencies = [
 ezmemory = "memory_service.main:main"
 
 [tool.setuptools]
-packages = ["ezmemory", "memory_service"]
 package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
